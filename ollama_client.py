@@ -17,6 +17,17 @@ class OllamaClient:
         self.base_url = f"{self.host}/api"
         # 复用 HTTP 连接，降低 TCP/TLS/握手开销
         self.session = requests.Session()
+
+    def warm_connection(self, timeout: int = 5):
+        """
+        轻量预热：建立连接并保活，降低首请求延迟
+        """
+        try:
+            resp = self.session.get(f"{self.base_url}/tags", timeout=timeout)
+            resp.raise_for_status()
+            return True
+        except Exception:
+            return False
     
     def _make_request(self, endpoint: str, data: Dict, retry_count: int = 0) -> Dict:
         """发送请求，带重试机制"""

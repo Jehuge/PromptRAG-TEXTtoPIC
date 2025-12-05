@@ -31,6 +31,8 @@ def init_components():
     try:
         if st.session_state.ollama_client is None:
             st.session_state.ollama_client = OllamaClient()
+            # 预热连接，减少首请求握手延迟
+            st.session_state.ollama_client.warm_connection()
         
         if st.session_state.vector_store is None:
             # 使用占位符显示加载状态
