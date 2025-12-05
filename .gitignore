@@ -13,13 +13,13 @@ ENV/
 # 如需提交，可以移除 venv/ 这一行
 
 # 数据文件
-data/
-db/
-*.index
-*.jsonl
-*.json
-*.xlsx
-*.csv
+# data/
+# db/
+# *.index
+# *.jsonl
+# *.json
+# *.xlsx
+# *.csv
 
 # 环境变量
 .env
