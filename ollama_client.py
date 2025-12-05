@@ -4,8 +4,8 @@ Ollama 客户端：负责与 PC 端的 Ollama 服务通信
 import requests
 import json
 import time
-from typing import Dict, Optional
-from config import OLLAMA_HOST, OLLAMA_MODEL, REQUEST_TIMEOUT, MAX_RETRIES
+from typing import Dict, Optional, Generator
+from config import OLLAMA_HOST, OLLAMA_MODEL, REQUEST_TIMEOUT, MAX_RETRIES, GENERATE_OPTIONS
 
 
 class OllamaClient:
@@ -50,13 +50,14 @@ class OllamaClient:
         Returns:
             生成的文本内容
         """
+        options = {"temperature": temperature}
+        options.update(GENERATE_OPTIONS)
+
         data = {
             "model": self.model,
             "prompt": prompt,
             "stream": False,
-            "options": {
-                "temperature": temperature
-            }
+            "options": options
         }
         
         if system:
@@ -64,6 +65,49 @@ class OllamaClient:
         
         response = self._make_request("generate", data)
         return response.get("response", "")
+
+    def stream_generate(
+        self,
+        prompt: str,
+        system: str = None,
+        temperature: float = 0.7,
+    ) -> Generator[str, None, None]:
+        """
+        流式生成文本，逐步返回 token
+        """
+        options = {"temperature": temperature}
+        options.update(GENERATE_OPTIONS)
+
+        data = {
+            "model": self.model,
+            "prompt": prompt,
+            "stream": True,
+            "options": options
+        }
+
+        if system:
+            data["system"] = system
+
+        with requests.post(
+            f"{self.base_url}/generate",
+            json=data,
+            timeout=REQUEST_TIMEOUT,
+            stream=True
+        ) as r:
+            r.raise_for_status()
+            for line in r.iter_lines(decode_unicode=True):
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                # Ollama 流式返回中，done=true 表示结束
+                if obj.get("done"):
+                    break
+                token = obj.get("response", "")
+                if token:
+                    yield token
     
     def chat(self, messages: list, temperature: float = 0.7) -> str:
         """

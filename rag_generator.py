@@ -96,6 +96,29 @@ class RAGGenerator:
             "user_intent": user_intent
         }
 
+    def stream_generate(self, user_intent: str, top_k: int = None):
+        """
+        流式生成 Prompt，返回 (token_generator, references)
+        """
+        top_k = top_k or TOP_K
+
+        # 1. 向量检索
+        retrieved = self.vector_store.search(user_intent, top_k=top_k)
+        retrieved_items = [item for item, _ in retrieved]
+
+        # 2. 构建上下文
+        context = self._build_context(user_intent, retrieved_items)
+        user_prompt = f"{context}\n\n请根据以上信息，生成一段高质量的中文绘图提示词："
+
+        # 3. 调用流式接口
+        token_generator = self.client.stream_generate(
+            prompt=user_prompt,
+            system=self.system_prompt,
+            temperature=0.7
+        )
+
+        return token_generator, retrieved_items
+
 
 if __name__ == "__main__":
     # 测试示例

@@ -3,6 +3,7 @@ Streamlit 用户界面：Prompt 助手
 """
 import streamlit as st
 import json
+import time
 from ollama_client import OllamaClient
 from vector_store import VectorStore
 from rag_generator import RAGGenerator
@@ -120,9 +121,63 @@ def main():
     
     with col2:
         top_k = st.number_input("检索数量", min_value=1, max_value=10, value=TOP_K, step=1)
-        generate_btn = st.button("🚀 生成 Prompt", type="primary", use_container_width=True)
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            search_btn = st.button("🔍 仅检索", use_container_width=True, help="只执行检索，不生成")
+        with col_btn2:
+            generate_btn = st.button("🚀 生成", type="primary", use_container_width=True, help="检索 + 生成完整流程")
     
-    if generate_btn and user_input:
+    # 仅检索模式
+    if search_btn and user_input:
+        import time
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        try:
+            status_text.text("🔍 正在检索...")
+            progress_bar.progress(10)
+            
+            start_time = time.time()
+            retrieved = st.session_state.vector_store.search(user_input, top_k=top_k)
+            search_time = time.time() - start_time
+            retrieved_items = [item for item, _ in retrieved]
+            
+            progress_bar.progress(100)
+            status_text.text(f"✓ 检索完成！耗时: {search_time:.3f} 秒")
+            
+            # 显示检索结果
+            st.markdown("---")
+            st.subheader(f"🔍 检索结果（找到 {len(retrieved_items)} 条）")
+            st.info(f"⏱️ 检索耗时: **{search_time:.3f} 秒**")
+            
+            for i, ref in enumerate(retrieved_items, 1):
+                with st.expander(f"结果 {i}"):
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        st.markdown(f"**主体**: {ref.get('subject', 'N/A')}")
+                        st.markdown(f"**风格**: {ref.get('art_style', 'N/A')}")
+                        st.markdown(f"**氛围**: {ref.get('mood', 'N/A')}")
+                    with col_b:
+                        elements = ref.get('visual_elements', [])
+                        tech = ref.get('technical', [])
+                        st.markdown(f"**视觉元素**: {', '.join(elements[:5]) if elements else 'N/A'}")
+                        st.markdown(f"**技术参数**: {', '.join(tech[:5]) if tech else 'N/A'}")
+                    st.text(f"原始: {ref.get('raw', 'N/A')}")
+            
+            # 保存检索结果到 session state，供生成使用
+            st.session_state.last_search_results = retrieved_items
+            st.session_state.last_user_input = user_input
+            
+        except Exception as e:
+            st.error(f"检索失败: {str(e)}")
+            st.exception(e)
+        finally:
+            progress_bar.empty()
+            status_text.empty()
+    
+    # 完整生成流程
+    elif generate_btn and user_input:
+        import time
         # 分步显示进度
         progress_bar = st.progress(0)
         status_text = st.empty()
@@ -132,34 +187,44 @@ def main():
             status_text.text("🔍 步骤 1/2: 正在检索相似提示词...")
             progress_bar.progress(10)
             
+            search_start = time.time()
             # 执行检索（encoder 已在初始化时预热，这里应该很快）
             retrieved = st.session_state.vector_store.search(user_input, top_k=top_k)
+            search_time = time.time() - search_start
             retrieved_items = [item for item, _ in retrieved]
             
             progress_bar.progress(30)
-            status_text.text(f"✓ 检索完成，找到 {len(retrieved_items)} 条相似提示词")
+            status_text.text(f"✓ 检索完成（耗时: {search_time:.3f}秒），找到 {len(retrieved_items)} 条相似提示词")
             
-            # 2. 生成阶段
-            status_text.text("✨ 步骤 2/2: 正在调用 Ollama 生成 Prompt（这可能需要几秒）...")
+            # 2. 生成阶段（流式展示）
+            status_text.text("✨ 步骤 2/2: 正在调用 Ollama 生成 Prompt（流式输出）...")
             progress_bar.progress(40)
             
             # 构建上下文
             context = st.session_state.rag_generator._build_context(user_input, retrieved_items)
             user_prompt = f"{context}\n\n请根据以上信息，生成一段高质量的中文绘图提示词："
             
-            # 调用 Ollama 生成
-            final_prompt = st.session_state.rag_generator.client.generate(
+            generate_start = time.time()
+            token_placeholder = st.empty()
+            token_buffer = []
+            
+            for tok in st.session_state.rag_generator.client.stream_generate(
                 prompt=user_prompt,
                 system=st.session_state.rag_generator.system_prompt,
                 temperature=0.7
-            )
+            ):
+                token_buffer.append(tok)
+                token_placeholder.text("".join(token_buffer))
+            
+            generate_time = time.time() - generate_start
+            final_prompt = "".join(token_buffer).strip()
             
             progress_bar.progress(100)
-            status_text.text("✓ 生成完成！")
+            status_text.text(f"✓ 生成完成！总耗时: {search_time + generate_time:.3f}秒")
             
             # 组装结果
             result = {
-                "final_prompt": final_prompt.strip(),
+                "final_prompt": final_prompt,
                 "references": retrieved_items,
                 "user_intent": user_input
             }
@@ -171,6 +236,15 @@ def main():
             # 显示结果
             st.markdown("---")
             st.subheader("✨ 生成的中文 Prompt")
+            
+            # 显示性能统计
+            col_perf1, col_perf2, col_perf3 = st.columns(3)
+            with col_perf1:
+                st.metric("🔍 检索耗时", f"{search_time:.3f}秒")
+            with col_perf2:
+                st.metric("✨ 生成耗时", f"{generate_time:.3f}秒")
+            with col_perf3:
+                st.metric("⏱️ 总耗时", f"{search_time + generate_time:.3f}秒")
             
             # 可复制的 Prompt 框
             st.code(result["final_prompt"], language="text")

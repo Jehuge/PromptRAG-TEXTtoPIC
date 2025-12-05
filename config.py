@@ -32,3 +32,11 @@ TOP_K = 5  # 检索 Top-K 个相似结果
 REQUEST_TIMEOUT = 300  # Ollama 请求超时时间（秒）
 MAX_RETRIES = 3  # 最大重试次数
 
+# 生成参数（控制模型输出长度与上下文）
+GENERATE_OPTIONS = {
+    # 限制输出长度，避免长时间生成卡顿
+    "num_predict": 320,   # 最大生成 token 数
+    # 控制上下文窗口，适度即可（过大可能拖慢推理）
+    "num_ctx": 2048,
+}
+
