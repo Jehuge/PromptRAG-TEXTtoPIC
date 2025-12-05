@@ -128,6 +128,7 @@ def main():
             search_btn = st.button("🔍 仅检索", use_container_width=True, help="只执行检索，不生成")
         with col_btn2:
             generate_btn = st.button("🚀 生成", type="primary", use_container_width=True, help="检索 + 生成完整流程")
+        fast_mode = st.checkbox("⚡ 低延迟生成（不带参考素材）", value=False, help="仅使用用户输入生成，跳过参考素材，减少上下文长度降低 TTFT")
         # 模型预热按钮（可选）
         if st.button("🔥 模型预热", use_container_width=True, help="调用一次短请求，让模型常驻以降低 TTFT"):
             with st.spinner("正在预热模型..."):
@@ -197,25 +198,33 @@ def main():
         status_text = st.empty()
         
         try:
-            # 1. 检索阶段
-            status_text.text("🔍 步骤 1/2: 正在检索相似提示词...")
-            progress_bar.progress(10)
-            
-            search_start = time.time()
-            # 执行检索（encoder 已在初始化时预热，这里应该很快）
-            retrieved = st.session_state.vector_store.search(user_input, top_k=top_k)
-            search_time = time.time() - search_start
-            retrieved_items = [item for item, _ in retrieved]
-            
-            progress_bar.progress(30)
-            status_text.text(f"✓ 检索完成（耗时: {search_time:.3f}秒），找到 {len(retrieved_items)} 条相似提示词")
+            # 1. 检索阶段（可选）
+            if fast_mode:
+                status_text.text("🔍 低延迟模式：跳过参考素材，直接生成...")
+                progress_bar.progress(20)
+                retrieved_items = []
+                search_time = 0.0
+            else:
+                status_text.text("🔍 步骤 1/2: 正在检索相似提示词...")
+                progress_bar.progress(10)
+                
+                search_start = time.time()
+                retrieved = st.session_state.vector_store.search(user_input, top_k=top_k)
+                search_time = time.time() - search_start
+                retrieved_items = [item for item, _ in retrieved]
+                
+                progress_bar.progress(30)
+                status_text.text(f"✓ 检索完成（耗时: {search_time:.3f}秒），找到 {len(retrieved_items)} 条相似提示词")
             
             # 2. 生成阶段（流式展示）
-            status_text.text("✨ 步骤 2/2: 正在调用 Ollama 生成 Prompt（流式输出）...")
+            status_text.text("✨ 正在调用 Ollama 生成 Prompt（流式输出）...")
             progress_bar.progress(40)
             
-            # 构建上下文
-            context = st.session_state.rag_generator._build_context(user_input, retrieved_items)
+            # 构建上下文（低延迟模式只用用户输入）
+            if fast_mode:
+                context = f"用户意图: {user_input}"
+            else:
+                context = st.session_state.rag_generator._build_context(user_input, retrieved_items)
             user_prompt = f"{context}\n\n请根据以上信息，生成一段高质量的中文绘图提示词："
             
             generate_start = time.time()
