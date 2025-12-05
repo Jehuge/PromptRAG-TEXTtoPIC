@@ -14,6 +14,9 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:32b")  # 根据实际模型名
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")  # 多语言支持好
 # 备选：EMBEDDING_MODEL = "sentence-transformers/clip-ViT-B-32"  # 图像语义对齐
 
+# Ollama 保活配置（降低 TTFT）
+OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "3m")  # 示例：30m、2h；设置为 "0" 关闭保活
+
 # 数据路径配置
 DATA_DIR = "data"
 RAW_DATA_DIR = os.path.join(DATA_DIR, "raw")  # 存放原始 Excel/CSV
@@ -31,12 +34,4 @@ TOP_K = 5  # 检索 Top-K 个相似结果
 # 请求配置
 REQUEST_TIMEOUT = 300  # Ollama 请求超时时间（秒）
 MAX_RETRIES = 3  # 最大重试次数
-
-# 生成参数（控制模型输出长度与上下文）
-GENERATE_OPTIONS = {
-    # 限制输出长度，避免长时间生成卡顿
-    "num_predict": 320,   # 最大生成 token 数
-    # 控制上下文窗口，适度即可（过大可能拖慢推理）
-    "num_ctx": 2048,
-}
 

@@ -5,7 +5,7 @@ import requests
 import json
 import time
 from typing import Dict, Optional, Generator
-from config import OLLAMA_HOST, OLLAMA_MODEL, REQUEST_TIMEOUT, MAX_RETRIES, GENERATE_OPTIONS
+from config import OLLAMA_HOST, OLLAMA_MODEL, REQUEST_TIMEOUT, MAX_RETRIES, OLLAMA_KEEP_ALIVE
 
 
 class OllamaClient:
@@ -15,13 +15,15 @@ class OllamaClient:
         self.host = host or OLLAMA_HOST
         self.model = model or OLLAMA_MODEL
         self.base_url = f"{self.host}/api"
+        # 复用 HTTP 连接，降低 TCP/TLS/握手开销
+        self.session = requests.Session()
     
     def _make_request(self, endpoint: str, data: Dict, retry_count: int = 0) -> Dict:
         """发送请求，带重试机制"""
         url = f"{self.base_url}/{endpoint}"
         
         try:
-            response = requests.post(
+            response = self.session.post(
                 url,
                 json=data,
                 timeout=REQUEST_TIMEOUT,
@@ -50,14 +52,14 @@ class OllamaClient:
         Returns:
             生成的文本内容
         """
-        options = {"temperature": temperature}
-        options.update(GENERATE_OPTIONS)
-
         data = {
             "model": self.model,
             "prompt": prompt,
             "stream": False,
-            "options": options
+            "options": {
+                "temperature": temperature,
+                "keep_alive": OLLAMA_KEEP_ALIVE,
+            }
         }
         
         if system:
@@ -75,27 +77,28 @@ class OllamaClient:
         """
         流式生成文本，逐步返回 token
         """
-        options = {"temperature": temperature}
-        options.update(GENERATE_OPTIONS)
-
         data = {
             "model": self.model,
             "prompt": prompt,
             "stream": True,
-            "options": options
+            "options": {
+                "temperature": temperature,
+                "keep_alive": OLLAMA_KEEP_ALIVE,
+            }
         }
 
         if system:
             data["system"] = system
 
-        with requests.post(
+        with self.session.post(
             f"{self.base_url}/generate",
             json=data,
             timeout=REQUEST_TIMEOUT,
             stream=True
         ) as r:
             r.raise_for_status()
-            for line in r.iter_lines(decode_unicode=True):
+            # 逐行读取，chunk_size=1 可减少等待缓冲
+            for line in r.iter_lines(chunk_size=1, decode_unicode=True):
                 if not line:
                     continue
                 try:

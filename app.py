@@ -126,6 +126,18 @@ def main():
             search_btn = st.button("🔍 仅检索", use_container_width=True, help="只执行检索，不生成")
         with col_btn2:
             generate_btn = st.button("🚀 生成", type="primary", use_container_width=True, help="检索 + 生成完整流程")
+        # 模型预热按钮（可选）
+        if st.button("🔥 模型预热", use_container_width=True, help="调用一次短请求，让模型常驻以降低 TTFT"):
+            with st.spinner("正在预热模型..."):
+                try:
+                    st.session_state.rag_generator.client.generate(
+                        prompt="说一句话：模型预热完成。",
+                        system="你是一个简短回答助手，只需一句话。",
+                        temperature=0.1,
+                    )
+                    st.success("✓ 预热完成，可降低首 token 延迟")
+                except Exception as e:
+                    st.error(f"预热失败: {e}")
     
     # 仅检索模式
     if search_btn and user_input:
@@ -207,12 +219,18 @@ def main():
             generate_start = time.time()
             token_placeholder = st.empty()
             token_buffer = []
+            first_token_time = None
             
             for tok in st.session_state.rag_generator.client.stream_generate(
                 prompt=user_prompt,
                 system=st.session_state.rag_generator.system_prompt,
                 temperature=0.7
             ):
+                if first_token_time is None:
+                    first_token_time = time.time()
+                    ttft = first_token_time - generate_start
+                    status_text.text(f"✨ 已收到首个 token，TTFT: {ttft:.3f} 秒")
+                    progress_bar.progress(70)
                 token_buffer.append(tok)
                 token_placeholder.text("".join(token_buffer))
             
@@ -245,6 +263,8 @@ def main():
                 st.metric("✨ 生成耗时", f"{generate_time:.3f}秒")
             with col_perf3:
                 st.metric("⏱️ 总耗时", f"{search_time + generate_time:.3f}秒")
+            if first_token_time:
+                st.caption(f"TTFT (首 token 延迟): {ttft:.3f} 秒")
             
             # 可复制的 Prompt 框
             st.code(result["final_prompt"], language="text")
