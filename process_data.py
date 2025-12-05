@@ -67,6 +67,39 @@ def main():
         print("✗ 未加载到任何数据")
         return
     
+    # 检查输出文件是否存在
+    from config import PROCESSED_DATA_DIR
+    output_path = os.path.join(PROCESSED_DATA_DIR, "structured_data.jsonl")
+    append_mode = False
+    
+    if os.path.exists(output_path):
+        # 统计现有记录数
+        try:
+            import jsonlines
+            with jsonlines.open(output_path, mode='r') as reader:
+                existing_count = sum(1 for _ in reader)
+            print(f"\n⚠️  检测到现有知识库文件: {output_path}")
+            print(f"   现有记录数: {existing_count} 条")
+            print(f"   新数据: {len(texts)} 条")
+            print("\n请选择处理模式:")
+            print("  1. 追加模式 (推荐) - 将新数据添加到现有知识库，避免重复")
+            print("  2. 覆盖模式 - 删除旧数据，只保留新数据")
+            print("  3. 取消")
+            
+            choice = input("\n请选择 (1/2/3，默认1): ").strip()
+            if choice == '2':
+                append_mode = False
+                print("⚠️  将覆盖现有知识库！")
+            elif choice == '3':
+                print("已取消")
+                return
+            else:
+                append_mode = True
+                print("✓ 使用追加模式")
+        except Exception as e:
+            print(f"读取现有文件失败: {e}，将使用覆盖模式")
+            append_mode = False
+    
     # 确认处理
     print(f"\n将处理 {len(texts)} 条记录")
     print("注意: 这可能需要较长时间，请耐心等待...")
@@ -77,7 +110,7 @@ def main():
     
     # 处理数据
     try:
-        output_path = pipeline.process_batch(texts)
+        output_path = pipeline.process_batch(texts, append=append_mode)
         print(f"\n✓ 处理完成！输出文件: {output_path}")
         print("\n下一步: 运行 python build_index.py 构建向量索引")
     except Exception as e:

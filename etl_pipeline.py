@@ -202,13 +202,14 @@ class ETLPipeline:
             print(f"✗ 加载 CSV 失败: {e}")
             return []
     
-    def process_batch(self, texts: List[str], output_path: str = None) -> str:
+    def process_batch(self, texts: List[str], output_path: str = None, append: bool = False) -> str:
         """
         批量处理文本，生成结构化 JSONL 文件
         
         Args:
             texts: 原始文本列表
             output_path: 输出文件路径（可选）
+            append: 是否追加模式（True=追加，False=覆盖）
         
         Returns:
             输出文件路径
@@ -216,10 +217,39 @@ class ETLPipeline:
         if output_path is None:
             output_path = os.path.join(PROCESSED_DATA_DIR, "structured_data.jsonl")
         
+        # 如果追加模式，读取现有数据，避免重复
+        existing_raws = set()
+        if append and os.path.exists(output_path):
+            print(f"检测到现有文件，读取已有数据以避免重复...")
+            try:
+                with jsonlines.open(output_path, mode='r') as reader:
+                    for item in reader:
+                        raw = item.get('raw', '')
+                        if raw:
+                            existing_raws.add(raw)
+                print(f"  已读取 {len(existing_raws)} 条现有记录")
+            except Exception as e:
+                print(f"  读取现有文件失败: {e}，将覆盖文件")
+                append = False
+        
+        # 过滤掉已存在的文本
+        if existing_raws:
+            original_count = len(texts)
+            texts = [t for t in texts if t not in existing_raws]
+            skipped_count = original_count - len(texts)
+            if skipped_count > 0:
+                print(f"  跳过 {skipped_count} 条已存在的记录")
+        
+        if not texts:
+            print("\n所有记录都已存在，无需处理")
+            return output_path
+        
         processed_count = 0
         failed_count = 0
         
-        with jsonlines.open(output_path, mode='w') as writer:
+        # 根据模式选择写入方式
+        mode = 'a' if append else 'w'
+        with jsonlines.open(output_path, mode=mode) as writer:
             for text in tqdm(texts, desc="处理中"):
                 parsed = self._parse_with_llm(text)
                 
@@ -241,6 +271,10 @@ class ETLPipeline:
         print(f"\n✓ 处理完成！")
         print(f"  成功: {processed_count} 条")
         print(f"  失败: {failed_count} 条")
+        if append:
+            print(f"  模式: 追加到现有文件")
+        else:
+            print(f"  模式: 覆盖文件")
         print(f"  输出文件: {output_path}")
         
         return output_path

@@ -44,10 +44,40 @@ def main():
         else:
             selected_file = jsonl_files[0]
     
+    # 检查现有索引
+    store = VectorStore()
+    has_existing = store.exists()
+    
+    if has_existing:
+        try:
+            store.load_index()
+            existing_count = store.index.ntotal
+            print(f"\n检测到现有索引: {existing_count} 条记录")
+        except:
+            existing_count = 0
+    else:
+        existing_count = 0
+    
     # 构建索引
     print(f"\n使用文件: {selected_file}")
     print(f"输出索引: {INDEX_PATH}")
     print(f"输出元数据: {METADATA_PATH}")
+    
+    if has_existing:
+        print("\n构建模式:")
+        print("  1. 增量模式 (推荐) - 只处理新增数据，快速更新")
+        print("  2. 全量重建 - 删除旧索引，重新构建全部数据")
+        
+        mode_choice = input("\n请选择模式 (1/2，默认1): ").strip()
+        incremental = mode_choice != '2'
+        
+        if incremental:
+            print("✓ 使用增量模式")
+        else:
+            print("⚠️  使用全量重建模式")
+    else:
+        incremental = True
+        print("\n首次构建，将创建新索引")
     
     confirm = input("\n确认开始构建？(y/n): ").strip().lower()
     if confirm != 'y':
@@ -55,8 +85,7 @@ def main():
         return
     
     try:
-        store = VectorStore()
-        store.build_index(selected_file)
+        store.build_index(selected_file, incremental=incremental)
         print("\n✓ 构建完成！")
     except Exception as e:
         print(f"\n✗ 构建失败: {e}")

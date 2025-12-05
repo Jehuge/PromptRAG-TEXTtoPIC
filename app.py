@@ -32,12 +32,19 @@ def init_components():
             st.session_state.ollama_client = OllamaClient()
         
         if st.session_state.vector_store is None:
-            st.session_state.vector_store = VectorStore()
-            if st.session_state.vector_store.exists():
-                st.session_state.vector_store.load_index()
-            else:
-                st.warning("⚠️ 向量库不存在，请先构建索引")
-                return False
+            # 使用占位符显示加载状态
+            with st.spinner("正在初始化向量库..."):
+                st.session_state.vector_store = VectorStore()
+                if st.session_state.vector_store.exists():
+                    st.session_state.vector_store.load_index()
+                    # 预热 encoder（进行一次 encode，避免首次检索时慢）
+                    try:
+                        st.session_state.vector_store.encoder.encode(["预热"])
+                    except:
+                        pass
+                else:
+                    st.warning("⚠️ 向量库不存在，请先构建索引")
+                    return False
         
         if st.session_state.rag_generator is None:
             st.session_state.rag_generator = RAGGenerator(
@@ -116,45 +123,87 @@ def main():
         generate_btn = st.button("🚀 生成 Prompt", type="primary", use_container_width=True)
     
     if generate_btn and user_input:
-        with st.spinner("正在检索和生成..."):
-            try:
-                # 生成
-                result = st.session_state.rag_generator.generate(user_input, top_k=top_k)
+        # 分步显示进度
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        try:
+            # 1. 检索阶段
+            status_text.text("🔍 步骤 1/2: 正在检索相似提示词...")
+            progress_bar.progress(10)
+            
+            # 执行检索（encoder 已在初始化时预热，这里应该很快）
+            retrieved = st.session_state.vector_store.search(user_input, top_k=top_k)
+            retrieved_items = [item for item, _ in retrieved]
+            
+            progress_bar.progress(30)
+            status_text.text(f"✓ 检索完成，找到 {len(retrieved_items)} 条相似提示词")
+            
+            # 2. 生成阶段
+            status_text.text("✨ 步骤 2/2: 正在调用 Ollama 生成 Prompt（这可能需要几秒）...")
+            progress_bar.progress(40)
+            
+            # 构建上下文
+            context = st.session_state.rag_generator._build_context(user_input, retrieved_items)
+            user_prompt = f"{context}\n\n请根据以上信息，生成一段高质量的中文绘图提示词："
+            
+            # 调用 Ollama 生成
+            final_prompt = st.session_state.rag_generator.client.generate(
+                prompt=user_prompt,
+                system=st.session_state.rag_generator.system_prompt,
+                temperature=0.7
+            )
+            
+            progress_bar.progress(100)
+            status_text.text("✓ 生成完成！")
+            
+            # 组装结果
+            result = {
+                "final_prompt": final_prompt.strip(),
+                "references": retrieved_items,
+                "user_intent": user_input
+            }
+            
+            # 清除进度条
+            progress_bar.empty()
+            status_text.empty()
+            
+            # 显示结果
+            st.markdown("---")
+            st.subheader("✨ 生成的中文 Prompt")
+            
+            # 可复制的 Prompt 框
+            st.code(result["final_prompt"], language="text")
+            
+            # 复制按钮（Streamlit 原生支持）
+            st.markdown("💡 点击上方代码框右上角的复制按钮即可复制")
+            st.info("📝 提示：生成的是中文提示词，可直接用于支持中文的 ComfyUI 工作流")
+            
+            # 显示参考素材
+            with st.expander("📚 参考素材（展开查看）", expanded=False):
+                for i, ref in enumerate(result["references"], 1):
+                    st.markdown(f"### 参考 {i}")
+                    
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        st.markdown(f"**主体**: {ref.get('subject', 'N/A')}")
+                        st.markdown(f"**风格**: {ref.get('art_style', 'N/A')}")
+                        st.markdown(f"**氛围**: {ref.get('mood', 'N/A')}")
+                    
+                    with col_b:
+                        elements = ref.get('visual_elements', [])
+                        tech = ref.get('technical', [])
+                        st.markdown(f"**视觉元素**: {', '.join(elements[:5]) if elements else 'N/A'}")
+                        st.markdown(f"**技术参数**: {', '.join(tech[:5]) if tech else 'N/A'}")
+                    
+                    with st.expander("原始 Prompt"):
+                        st.text(ref.get('raw', 'N/A'))
+                    
+                    st.markdown("---")
                 
-                # 显示结果
-                st.markdown("---")
-                st.subheader("✨ 生成的中文 Prompt")
-                
-                # 可复制的 Prompt 框
-                st.code(result["final_prompt"], language="text")
-                
-                # 复制按钮（Streamlit 原生支持）
-                st.markdown("💡 点击上方代码框右上角的复制按钮即可复制")
-                st.info("📝 提示：生成的是中文提示词，可直接用于支持中文的 ComfyUI 工作流")
-                
-                # 显示参考素材
-                with st.expander("📚 参考素材（展开查看）", expanded=False):
-                    for i, ref in enumerate(result["references"], 1):
-                        st.markdown(f"### 参考 {i}")
-                        
-                        col_a, col_b = st.columns(2)
-                        with col_a:
-                            st.markdown(f"**主体**: {ref.get('subject', 'N/A')}")
-                            st.markdown(f"**风格**: {ref.get('art_style', 'N/A')}")
-                            st.markdown(f"**氛围**: {ref.get('mood', 'N/A')}")
-                        
-                        with col_b:
-                            st.markdown(f"**视觉元素**: {', '.join(ref.get('visual_elements', []))}")
-                            st.markdown(f"**技术参数**: {', '.join(ref.get('technical', []))}")
-                        
-                        with st.expander("原始 Prompt"):
-                            st.text(ref.get('raw', 'N/A'))
-                        
-                        st.markdown("---")
-                
-            except Exception as e:
-                st.error(f"生成失败: {str(e)}")
-                st.exception(e)
+        except Exception as e:
+            st.error(f"生成失败: {str(e)}")
+            st.exception(e)
     
     elif generate_btn:
         st.warning("请输入你的创作想法")

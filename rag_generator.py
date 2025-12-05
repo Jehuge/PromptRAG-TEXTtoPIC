@@ -31,17 +31,30 @@ class RAGGenerator:
 现在开始生成。"""
     
     def _build_context(self, user_intent: str, retrieved_items: List[Dict]) -> str:
-        """构建上下文提示词"""
-        context_parts = [f"用户意图: {user_intent}\n\n参考素材:\n"]
+        """构建上下文提示词（优化版：更简洁）"""
+        # 简化上下文，只保留关键信息
+        context_parts = [f"用户意图: {user_intent}\n\n参考素材（共{len(retrieved_items)}条）:\n"]
         
         for i, item in enumerate(retrieved_items, 1):
-            context_parts.append(f"{i}. 主体: {item.get('subject', 'N/A')}")
-            context_parts.append(f"   风格: {item.get('art_style', 'N/A')}")
-            context_parts.append(f"   元素: {', '.join(item.get('visual_elements', []))}")
-            context_parts.append(f"   氛围: {item.get('mood', 'N/A')}")
-            context_parts.append(f"   技术: {', '.join(item.get('technical', []))}")
-            context_parts.append(f"   原始: {item.get('raw', 'N/A')}")
-            context_parts.append("")
+            # 只保留最重要的信息，减少 token 数量
+            parts = []
+            if item.get('subject'):
+                parts.append(f"主体:{item['subject']}")
+            if item.get('art_style'):
+                parts.append(f"风格:{item['art_style']}")
+            if item.get('visual_elements'):
+                # 只取前3个元素
+                elements = item['visual_elements'][:3]
+                parts.append(f"元素:{','.join(elements)}")
+            if item.get('mood'):
+                parts.append(f"氛围:{item['mood']}")
+            if item.get('technical'):
+                # 只取前3个技术参数
+                tech = item['technical'][:3]
+                parts.append(f"技术:{','.join(tech)}")
+            
+            if parts:
+                context_parts.append(f"{i}. {', '.join(parts)}")
         
         return "\n".join(context_parts)
     
