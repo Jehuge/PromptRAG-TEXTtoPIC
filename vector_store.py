@@ -8,7 +8,7 @@ import numpy as np
 import faiss
 from sentence_transformers import SentenceTransformer
 from typing import List, Dict, Tuple
-from config import EMBEDDING_MODEL, INDEX_PATH, METADATA_PATH
+from config import EMBEDDING_MODEL, INDEX_PATH, METADATA_PATH, MODEL_CACHE_DIR
 
 
 class VectorStore:
@@ -28,20 +28,20 @@ class VectorStore:
             print(f"正在加载 Embedding 模型: {self.model_name}...")
             # 检查模型是否已下载
             try:
-                from sentence_transformers import __version__ as st_version
                 import os
-                cache_dir = os.path.expanduser("~/.cache/huggingface/hub")
-                model_cache_path = os.path.join(cache_dir, f"models--{self.model_name.replace('/', '--')}")
+                # 使用配置的本地缓存目录
+                model_cache_path = os.path.join(MODEL_CACHE_DIR, f"models--{self.model_name.replace('/', '--')}")
                 
                 if os.path.exists(model_cache_path):
-                    print("提示: 模型已下载，正在加载到内存（首次加载需要几秒）...")
+                    print(f"提示: 模型已在本地缓存 ({MODEL_CACHE_DIR})，正在加载...")
                 else:
-                    print("提示: 首次运行需要下载模型（约 1-2GB），可能需要几分钟，请耐心等待...")
+                    print(f"提示: 首次运行需要下载模型到本地目录 {MODEL_CACHE_DIR}（约 1-2GB），可能需要几分钟...")
             except:
                 print("提示: 正在加载模型...")
             
             try:
-                encoder = SentenceTransformer(self.model_name)
+                # 指定 cache_folder 为项目目录下的 models
+                encoder = SentenceTransformer(self.model_name, cache_folder=MODEL_CACHE_DIR)
                 # 获取实际向量维度
                 test_embedding = encoder.encode(["test"])
                 dimension = test_embedding.shape[1]
@@ -279,4 +279,3 @@ if __name__ == "__main__":
             print(f"   风格: {metadata.get('art_style', 'N/A')}")
             print(f"   元素: {', '.join(metadata.get('visual_elements', []))}")
             print()
-

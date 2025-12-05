@@ -13,9 +13,10 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:32b")  # 根据实际模型名
 # Embedding 模型配置（运行在 Mac 端）
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")  # 多语言支持好
 # 备选：EMBEDDING_MODEL = "sentence-transformers/clip-ViT-B-32"  # 图像语义对齐
+MODEL_CACHE_DIR = os.path.join(os.getcwd(), "models")  # 模型下载缓存目录
 
 # Ollama 保活配置（降低 TTFT）
-OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "3m")  # 示例：30m、2h；设置为 "0" 关闭保活
+# OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "3m")  # 示例：30m、2h；设置为 "0" 关闭保活
 
 # 数据路径配置
 DATA_DIR = "data"
@@ -34,4 +35,3 @@ TOP_K = 5  # 检索 Top-K 个相似结果
 # 请求配置
 REQUEST_TIMEOUT = 300  # Ollama 请求超时时间（秒）
 MAX_RETRIES = 3  # 最大重试次数
-

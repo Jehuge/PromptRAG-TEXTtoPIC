@@ -21,6 +21,9 @@ ENV/
 # *.xlsx
 # *.csv
 
+# 模型文件
+models/
+
 # 环境变量
 .env
 
@@ -36,4 +39,3 @@ ENV/
 # 系统文件
 .DS_Store
 Thumbs.db
-
