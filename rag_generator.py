@@ -1,0 +1,109 @@
+"""
+RAG 生成模块：结合检索结果和用户意图，生成最终 Prompt
+"""
+from typing import List, Dict
+from ollama_client import OllamaClient
+from vector_store import VectorStore
+from config import TOP_K
+
+
+class RAGGenerator:
+    """RAG 检索增强生成器"""
+    
+    def __init__(self, vector_store: VectorStore, ollama_client: OllamaClient = None):
+        self.vector_store = vector_store
+        self.client = ollama_client or OllamaClient()
+        self.system_prompt = self._get_system_prompt()
+    
+    def _get_system_prompt(self) -> str:
+        """获取用于生成最终 Prompt 的系统提示词"""
+        return """你是一位专业的 AI 绘图提示词工程师。你的任务是根据用户意图和参考素材，生成一段高质量、可直接用于 ComfyUI 的中文提示词。
+
+要求：
+1. 提示词必须是中文（即使用户用英文提问，也要生成中文提示词）
+2. 逻辑通顺，结构清晰
+3. 包含主体、风格、视觉元素、氛围和技术参数
+4. 技术参数可以用英文（如 "8k, masterpiece, highly detailed"）或中文（如 "8k, 杰作, 高度细节"）
+5. 直接输出提示词，不要包含任何解释性文字
+6. 如果参考素材是英文，请将其转换为对应的中文表达
+7. 保持提示词的专业性和准确性
+
+现在开始生成。"""
+    
+    def _build_context(self, user_intent: str, retrieved_items: List[Dict]) -> str:
+        """构建上下文提示词"""
+        context_parts = [f"用户意图: {user_intent}\n\n参考素材:\n"]
+        
+        for i, item in enumerate(retrieved_items, 1):
+            context_parts.append(f"{i}. 主体: {item.get('subject', 'N/A')}")
+            context_parts.append(f"   风格: {item.get('art_style', 'N/A')}")
+            context_parts.append(f"   元素: {', '.join(item.get('visual_elements', []))}")
+            context_parts.append(f"   氛围: {item.get('mood', 'N/A')}")
+            context_parts.append(f"   技术: {', '.join(item.get('technical', []))}")
+            context_parts.append(f"   原始: {item.get('raw', 'N/A')}")
+            context_parts.append("")
+        
+        return "\n".join(context_parts)
+    
+    def generate(self, user_intent: str, top_k: int = None) -> Dict:
+        """
+        生成最终 Prompt
+        
+        Args:
+            user_intent: 用户意图（中文或英文）
+            top_k: 检索数量（默认使用配置值）
+        
+        Returns:
+            包含生成结果和参考素材的字典
+        """
+        top_k = top_k or TOP_K
+        
+        # 1. 向量检索
+        retrieved = self.vector_store.search(user_intent, top_k=top_k)
+        retrieved_items = [item for item, _ in retrieved]
+        
+        # 2. 构建上下文
+        context = self._build_context(user_intent, retrieved_items)
+        
+        # 3. 生成最终 Prompt
+        user_prompt = f"{context}\n\n请根据以上信息，生成一段高质量的中文绘图提示词："
+        
+        final_prompt = self.client.generate(
+            prompt=user_prompt,
+            system=self.system_prompt,
+            temperature=0.7
+        )
+        
+        # 清理输出
+        final_prompt = final_prompt.strip()
+        
+        return {
+            "final_prompt": final_prompt,
+            "references": retrieved_items,
+            "user_intent": user_intent
+        }
+
+
+if __name__ == "__main__":
+    # 测试示例
+    from vector_store import VectorStore
+    
+    # 加载向量库
+    store = VectorStore()
+    if store.exists():
+        store.load_index()
+        
+        # 创建生成器
+        generator = RAGGenerator(store)
+        
+        # 测试生成
+        result = generator.generate("赛博朋克风格的雨夜猫咪")
+        
+        print("\n" + "="*60)
+        print("用户意图:", result["user_intent"])
+        print("\n生成的 Prompt:")
+        print(result["final_prompt"])
+        print("\n参考素材数量:", len(result["references"]))
+    else:
+        print("向量库不存在，请先构建索引")
+

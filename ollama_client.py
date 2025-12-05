@@ -1,0 +1,108 @@
+"""
+Ollama 客户端：负责与 PC 端的 Ollama 服务通信
+"""
+import requests
+import json
+import time
+from typing import Dict, Optional
+from config import OLLAMA_HOST, OLLAMA_MODEL, REQUEST_TIMEOUT, MAX_RETRIES
+
+
+class OllamaClient:
+    """Ollama API 客户端封装"""
+    
+    def __init__(self, host: str = None, model: str = None):
+        self.host = host or OLLAMA_HOST
+        self.model = model or OLLAMA_MODEL
+        self.base_url = f"{self.host}/api"
+    
+    def _make_request(self, endpoint: str, data: Dict, retry_count: int = 0) -> Dict:
+        """发送请求，带重试机制"""
+        url = f"{self.base_url}/{endpoint}"
+        
+        try:
+            response = requests.post(
+                url,
+                json=data,
+                timeout=REQUEST_TIMEOUT,
+                stream=False
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            if retry_count < MAX_RETRIES:
+                wait_time = 2 ** retry_count  # 指数退避
+                print(f"请求失败，{wait_time}秒后重试... (尝试 {retry_count + 1}/{MAX_RETRIES})")
+                time.sleep(wait_time)
+                return self._make_request(endpoint, data, retry_count + 1)
+            else:
+                raise Exception(f"请求失败，已重试 {MAX_RETRIES} 次: {str(e)}")
+    
+    def generate(self, prompt: str, system: str = None, temperature: float = 0.7) -> str:
+        """
+        生成文本
+        
+        Args:
+            prompt: 用户提示词
+            system: 系统提示词
+            temperature: 温度参数
+        
+        Returns:
+            生成的文本内容
+        """
+        data = {
+            "model": self.model,
+            "prompt": prompt,
+            "stream": False,
+            "options": {
+                "temperature": temperature
+            }
+        }
+        
+        if system:
+            data["system"] = system
+        
+        response = self._make_request("generate", data)
+        return response.get("response", "")
+    
+    def chat(self, messages: list, temperature: float = 0.7) -> str:
+        """
+        对话模式生成
+        
+        Args:
+            messages: 消息列表，格式 [{"role": "user", "content": "..."}]
+            temperature: 温度参数
+        
+        Returns:
+            生成的文本内容
+        """
+        data = {
+            "model": self.model,
+            "messages": messages,
+            "stream": False,
+            "options": {
+                "temperature": temperature
+            }
+        }
+        
+        response = self._make_request("chat", data)
+        return response.get("message", {}).get("content", "")
+    
+    def test_connection(self) -> bool:
+        """测试与 Ollama 服务的连接"""
+        try:
+            response = requests.get(f"{self.host}/api/tags", timeout=5)
+            response.raise_for_status()
+            models = response.json().get("models", [])
+            print(f"✓ 连接成功！可用模型: {[m.get('name') for m in models]}")
+            return True
+        except Exception as e:
+            print(f"✗ 连接失败: {str(e)}")
+            return False
+
+
+if __name__ == "__main__":
+    # 测试连接
+    client = OllamaClient()
+    client.test_connection()
+
