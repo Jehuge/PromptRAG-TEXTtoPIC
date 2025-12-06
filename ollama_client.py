@@ -5,7 +5,7 @@ import requests
 import json
 import time
 from typing import Dict, Optional, Generator
-from config import OLLAMA_HOST, OLLAMA_MODEL, REQUEST_TIMEOUT, MAX_RETRIES
+from config import OLLAMA_HOST, OLLAMA_MODEL, REQUEST_TIMEOUT, MAX_RETRIES,OLLAMA_KEEP_ALIVE
 
 
 class OllamaClient:
@@ -68,7 +68,8 @@ class OllamaClient:
             "prompt": prompt,
             "stream": False,
             "options": {
-                "temperature": temperature
+                "temperature": temperature,
+                "keep_alive": OLLAMA_KEEP_ALIVE,
             }
         }
         
@@ -92,7 +93,8 @@ class OllamaClient:
             "prompt": prompt,
             "stream": True,
             "options": {
-                "temperature": temperature
+                "temperature": temperature,
+                "keep_alive": OLLAMA_KEEP_ALIVE,
                 }
         }
 

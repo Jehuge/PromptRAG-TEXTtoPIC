@@ -17,11 +17,11 @@ def main():
     data_files = []
     if os.path.exists(RAW_DATA_DIR):
         for file in os.listdir(RAW_DATA_DIR):
-            if file.endswith(('.xlsx', '.xls', '.csv')):
+            if file.endswith(('.xlsx', '.xls', '.csv', '.jsonl')):
                 data_files.append(os.path.join(RAW_DATA_DIR, file))
     
     if not data_files:
-        print(f"\n✗ 未找到数据文件，请将 Excel/CSV 文件放入以下目录:")
+        print(f"\n✗ 未找到数据文件，请将 Excel/CSV/JSONL 文件放入以下目录:")
         print(f"  {RAW_DATA_DIR}")
         print(f"\n正在创建目录...")
         os.makedirs(RAW_DATA_DIR, exist_ok=True)
@@ -60,6 +60,8 @@ def main():
     print(f"\n正在加载数据: {selected_file}")
     if selected_file.endswith('.csv'):
         texts = pipeline.load_csv(selected_file)
+    elif selected_file.endswith('.jsonl'):
+        texts = pipeline.load_jsonl(selected_file)
     else:
         texts = pipeline.load_excel(selected_file)
     
@@ -121,4 +123,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

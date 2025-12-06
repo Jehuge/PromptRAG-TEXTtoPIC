@@ -122,6 +122,33 @@ class ETLPipeline:
             print(f"解析过程出错: {e}")
             return None
     
+    def load_jsonl(self, file_path: str) -> List[str]:
+        """
+        从 JSONL 文件加载数据
+        格式: {"file": "文件名", "prompt": "提示词内容"}
+        
+        Args:
+            file_path: JSONL 文件路径
+        
+        Returns:
+            提示词文本列表
+        """
+        try:
+            texts = []
+            with jsonlines.open(file_path, mode='r') as reader:
+                for item in reader:
+                    if isinstance(item, dict) and "prompt" in item:
+                        text = item["prompt"]
+                        if text and isinstance(text, str) and text.strip():
+                            texts.append(text.strip())
+            
+            print(f"✓ 从 {file_path} 加载了 {len(texts)} 条记录")
+            return texts
+            
+        except Exception as e:
+            print(f"✗ 加载 JSONL 失败: {e}")
+            return []
+
     def load_excel(self, file_path: str, sheet_name: str = None, column: str = None) -> List[str]:
         """
         从 Excel 文件加载数据
@@ -291,4 +318,3 @@ if __name__ == "__main__":
         result = pipeline._parse_with_llm(test_text)
         print("\n解析结果:")
         print(json.dumps(result, indent=2, ensure_ascii=False))
-

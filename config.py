@@ -16,7 +16,7 @@ EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")  # 多语言支持
 MODEL_CACHE_DIR = os.path.join(os.getcwd(), "models")  # 模型下载缓存目录
 
 # Ollama 保活配置（降低 TTFT）
-# OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "3m")  # 示例：30m、2h；设置为 "0" 关闭保活
+OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "5m")  # 示例：30m、2h；设置为 "0" 关闭保活
 
 # 数据路径配置
 DATA_DIR = "data"
